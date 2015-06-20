@@ -1,1 +1,2 @@
-
+Small implementation of sprintf() and sscanf().
+It uses just a few bytes of stack. No floating-point support (%f).
