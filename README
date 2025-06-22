@@ -1,2 +1,6 @@
 Small implementation of sprintf() and sscanf().
 It uses just a few bytes of stack. No floating-point support (%f).
+
+Test run:
+
+$ gcc -W -Wall -Wextra -pedantic -I src src/mfmt.c test/mfmt.c -o test_mfmt && ./test_mfmt

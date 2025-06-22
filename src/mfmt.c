@@ -96,52 +96,12 @@ dec_to_unsigned(const char *str, unsigned long *out)
 
 /* Returns a pointer after the last read char, or 'str' on error. */
 static char*
-hex_to_signed(const char *str, long *out)
-{
-        const char * cur = skip_spaces(str);
-        long value = 0;
-        int isneg = 0, isempty = 1;
-        if (cur[0] == '+'){
-                cur += 1;
-        }else if(cur[0] == '-'){
-                cur += 1;
-                isneg = 1;
-        }
-        if (cur[0] == '0' && cur[1] == 'x'){
-                cur += 2;
-        }
-        while (*cur != '\0'){
-                if(*cur >= '0' && *cur <= '9'){
-                        value = (value * 16) + (*cur - '0');
-                }else if (*cur >= 'a' && *cur <= 'f'){
-                        value = (value * 16) + 10 + (*cur - 'a');
-                }else if (*cur >= 'A' && *cur <= 'F'){
-                        value = (value * 16) + 10 + (*cur - 'A');
-                }else{
-                        break;
-                }
-                isempty = 0;
-                ++cur;
-        }
-        if (isempty){
-                return (char*)str;
-        }
-        if (isneg){
-                *out = -value;
-        }else{
-                *out = value;
-        }
-        return (char*)cur;
-}
-
-/* Returns a pointer after the last read char, or 'str' on error. */
-static char*
 hex_to_unsigned(const char *str, unsigned long *out)
 {
         const char * cur = skip_spaces(str);
         unsigned long value = 0;
         int isempty = 1;
-        if (cur[0] == '0' && cur[1] == 'x'){
+        if (cur[0] == '0' && (cur[1] == 'x' || cur[1] == 'X')){
                 cur += 2;
         }
         while (*cur != '\0'){
@@ -353,9 +313,7 @@ NAME##_to_dec(TYPE val, char padchar, size_t padlen,                    \
 }
 
 MFMT_DEC_TO_SIGNED(int, int)
-MFMT_HEX_TO_SIGNED(int, int)
 MFMT_SIGNED_TO_DEC(int, int)
-MFMT_SIGNED_TO_HEX(int, int)
 
 MFMT_DEC_TO_UNSIGNED(unsigned int, uint)
 MFMT_HEX_TO_UNSIGNED(unsigned int, uint)
@@ -364,7 +322,7 @@ MFMT_UNSIGNED_TO_HEX(unsigned int, uint)
 MFMT_UNSIGNED_TO_HEX(size_t, siz)
 
 static const char*
-parse_arg(const char *fmt, const char *str, va_list args)
+parse_arg(const char *fmt, const char *str, va_list *args)
 {
         int *intp, intv = 0;
         unsigned int *uintp, uintv = 0, width = 0;
@@ -374,23 +332,23 @@ parse_arg(const char *fmt, const char *str, va_list args)
         if (*fmt == 'd'){
                 cur = dec_to_int(str, &intv);
                 if (cur != str){
-                        intp = va_arg(args, int*);
+                        intp = va_arg(*args, int*);
                         *intp = intv;
                 }
         }else if (*fmt == 'u'){
                 cur = dec_to_uint(str, &uintv);
                 if (cur != str){
-                        uintp = va_arg(args, unsigned int*);
+                        uintp = va_arg(*args, unsigned int*);
                         *uintp = uintv;
                 }
         }else if (*fmt == 'x' || *fmt == 'X'){
                 cur = hex_to_uint(str, &uintv);
                 if (cur != str){
-                        uintp = va_arg(args, unsigned int*);
+                        uintp = va_arg(*args, unsigned int*);
                         *uintp = uintv;
                 }
         }else if (*fmt == 'c'){
-                charp = va_arg(args, char*);
+                charp = va_arg(*args, char*);
                 if (width == 0){
                         width = 1;
                 }
@@ -400,7 +358,7 @@ parse_arg(const char *fmt, const char *str, va_list args)
                         ++uintv;
                 }
         }else if (*fmt == 's'){
-                charp = va_arg(args, char*);
+                charp = va_arg(*args, char*);
                 while (cur[0] != '\0' && ! is_space(cur[0]) &&
                        (width == 0 || uintv < width)){
                         charp[uintv] = cur[0];
@@ -415,7 +373,7 @@ parse_arg(const char *fmt, const char *str, va_list args)
 }
 
 static char*
-print_arg(const char *fmt, char *str, size_t len, va_list args)
+print_arg(const char *fmt, char *str, size_t len, va_list *args)
 {
         unsigned int uintv, width = 0;
         size_t charplen = 0, padlen = 0;
@@ -423,21 +381,21 @@ print_arg(const char *fmt, char *str, size_t len, va_list args)
         char *charp, padchar = (*fmt == '0' ? '0' : ' ');
         fmt = dec_to_uint(fmt, &width);
         if (*fmt == 'd' || *fmt == 'i'){
-                intv = va_arg(args, int);
+                intv = va_arg(*args, int);
                 str = int_to_dec(intv, padchar, width, len, str);
         }else if (*fmt == 'u'){
-                uintv = va_arg(args, unsigned int);
+                uintv = va_arg(*args, unsigned int);
                 str = uint_to_dec(uintv, padchar, width, len, str);
         }else if (*fmt == 'x' || *fmt == 'X'){
-                uintv = va_arg(args, unsigned int);
+                uintv = va_arg(*args, unsigned int);
                 str = uint_to_hex(uintv, (*fmt == 'X'), padchar, width,
                                   len, str);
         }else if (*fmt == 'p'){
-                charp = (char*)va_arg(args, void*);
+                charp = (char*)va_arg(*args, void*);
                 str = siz_to_hex((size_t)charp, 0, padchar, width,
                                  len, str);
         }else if (*fmt == 'c'){
-                intv = va_arg(args, int);
+                intv = va_arg(*args, int);
                 if (width > 1){
                         padlen = (size_t)width - 1;
                         padlen = (padlen < len ? padlen : len);
@@ -451,7 +409,10 @@ print_arg(const char *fmt, char *str, size_t len, va_list args)
                         len -= 1;
                 }
         }else if (*fmt == 's'){
-                charp = va_arg(args, char*);
+                charp = va_arg(*args, char*);
+                if (charp == NULL) {
+                        charp = "(null)";  // Handle NULL pointers gracefully
+                }
                 charplen = strlen(charp);
                 if (width > 0 && (size_t)width > charplen){
                         padlen = (size_t)width - charplen;
@@ -488,17 +449,27 @@ mfmt_print(char *str, size_t len, const char *fmt, ...)
         va_start(args, fmt);
         while (fmt[0] != '\0' && len > 0){
                 if (fmt[0] == '%'){
-                        tmp = print_arg(&fmt[1], cur, len, args);
-                        if (tmp == cur){
+                        const char *fmt_start = &fmt[1];
+                        tmp = print_arg(fmt_start, cur, len, &args);
+
+                        // Advance format pointer past the format specifier
+                        ++fmt;  // Skip '%'
+                        while (fmt[0] >= '0' && fmt[0] <= '9'){
+                                ++fmt;  // Skip width digits
+                        }
+
+                        // Check if we have a valid format specifier
+                        if (fmt[0] == 'd' || fmt[0] == 'i' || fmt[0] == 'u' ||
+                            fmt[0] == 'x' || fmt[0] == 'X' || fmt[0] == 'c' ||
+                            fmt[0] == 's' || fmt[0] == 'p' || fmt[0] == '%') {
+                                // Valid format specifier, continue even if no output
+                                len -= (tmp - cur);
+                                cur = tmp;
+                                ++fmt;  // Skip format character
+                        } else {
+                                // Invalid format specifier, break
                                 break;
                         }
-                        len -= (tmp - cur);
-                        cur = tmp;
-                        ++fmt;
-                        while (fmt[0] >= '0' && fmt[0] <= '9'){
-                                ++fmt;
-                        }
-                        ++fmt;
                 }else{
                         cur[0] = fmt[0];
                         --len;
@@ -520,7 +491,7 @@ mfmt_scan(const char *str, const char *fmt, ...)
         va_start(args, fmt);
         while (fmt[0] != '\0' && str[0] != '\0'){
                 if (fmt[0] == '%'){
-                        const char * tmp = parse_arg(&fmt[1], str, args);
+                        const char * tmp = parse_arg(&fmt[1], str, &args);
                         if (tmp == str){
                                 break;
                         }
